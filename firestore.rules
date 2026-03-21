@@ -1,0 +1,177 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Document ID: {userId} (Firebase Auth UID)
+    // Fields:
+    //   - uid: string (required) - Firebase Auth UID
+    //   - email: string (required) - User email
+    //   - role: string (required, 'admin' or 'user') - User role
+    //   - createdAt: timestamp (required) - Creation time
+    //   - lastVisit: timestamp (optional) - Last visit time
+    //   - interests: list of strings (optional) - User interests
+    //
+    // Collection: leads
+    // Document ID: auto-generated
+    // Fields:
+    //   - name: string (required) - Lead name
+    //   - email: string (required) - Lead email
+    //   - company: string (optional) - Lead company
+    //   - message: string (required) - Lead message
+    //   - intentScore: number (optional) - AI generated score
+    //   - aiSummary: string (optional) - AI generated summary
+    //   - status: string (required, 'new', 'contacted', 'qualified', 'archived') - Lead status
+    //   - createdAt: timestamp (required) - Creation time
+    //
+    // Collection: chats
+    // Document ID: auto-generated
+    // Fields:
+    //   - userId: string (optional) - User ID if logged in
+    //   - sessionId: string (required) - Anonymous session ID
+    //   - messages: list of objects (required) - Chat messages
+    //   - createdAt: timestamp (required) - Creation time
+    //   - updatedAt: timestamp (required) - Last update time
+    //
+    // Collection: content_suggestions
+    // Document ID: auto-generated
+    // Fields:
+    //   - type: string (required, 'blog', 'headline', 'offer') - Content type
+    //   - title: string (required) - Content title
+    //   - content: string (required) - Content body
+    //   - status: string (required, 'draft', 'published', 'rejected') - Content status
+    //   - createdAt: timestamp (required) - Creation time
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && (
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin') ||
+        (request.auth.token.email == "ratnabhowmik0099@gmail.com" && request.auth.token.email_verified == true)
+      );
+    }
+
+    function isValidEmail(email) {
+      return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    function hasOnlyAllowedFields(allowedFields) {
+      return request.resource.data.keys().hasOnly(allowedFields);
+    }
+
+    function hasRequiredFields(requiredFields) {
+      return request.resource.data.keys().hasAll(requiredFields);
+    }
+
+    function isPositive(num) {
+      return num is number && num >= 0;
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+
+    function isValidUser(data) {
+      return hasOnlyAllowedFields(['uid', 'email', 'role', 'createdAt', 'lastVisit', 'interests']) &&
+             hasRequiredFields(['uid', 'email', 'role', 'createdAt']) &&
+             data.uid is string && data.uid.size() > 0 && data.uid.size() < 128 &&
+             isValidEmail(data.email) &&
+             data.role in ['admin', 'user'] &&
+             data.createdAt is timestamp &&
+             (!('lastVisit' in data) || data.lastVisit is timestamp) &&
+             (!('interests' in data) || (data.interests is list && data.interests.size() <= 20));
+    }
+
+    function isValidLead(data) {
+      return hasOnlyAllowedFields(['name', 'email', 'company', 'message', 'intentScore', 'aiSummary', 'status', 'createdAt']) &&
+             hasRequiredFields(['name', 'email', 'message', 'status', 'createdAt']) &&
+             data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
+             isValidEmail(data.email) &&
+             data.message is string && data.message.size() > 0 && data.message.size() < 5000 &&
+             data.status in ['new', 'contacted', 'qualified', 'archived'] &&
+             data.createdAt is timestamp &&
+             (!('company' in data) || (data.company is string && data.company.size() < 100)) &&
+             (!('intentScore' in data) || (data.intentScore is number && data.intentScore >= 0 && data.intentScore <= 100)) &&
+             (!('aiSummary' in data) || (data.aiSummary is string && data.aiSummary.size() < 2000));
+    }
+
+    function isValidChat(data) {
+      return hasOnlyAllowedFields(['userId', 'sessionId', 'messages', 'createdAt', 'updatedAt']) &&
+             hasRequiredFields(['sessionId', 'messages', 'createdAt', 'updatedAt']) &&
+             data.sessionId is string && data.sessionId.size() > 0 && data.sessionId.size() < 128 &&
+             data.messages is list && data.messages.size() <= 1000 &&
+             data.createdAt is timestamp &&
+             data.updatedAt is timestamp &&
+             (!('userId' in data) || (data.userId is string && data.userId.size() < 128));
+    }
+
+    function isValidContentSuggestion(data) {
+      return hasOnlyAllowedFields(['type', 'title', 'content', 'status', 'createdAt']) &&
+             hasRequiredFields(['type', 'title', 'content', 'status', 'createdAt']) &&
+             data.type in ['blog', 'headline', 'offer'] &&
+             data.title is string && data.title.size() > 0 && data.title.size() < 200 &&
+             data.content is string && data.content.size() > 0 && data.content.size() < 10000 &&
+             data.status in ['draft', 'published', 'rejected'] &&
+             data.createdAt is timestamp;
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow create: if isAuthenticated() && isValidUser(request.resource.data) && (
+        (isOwner(userId) && request.resource.data.role == 'user' && request.resource.data.uid == userId) || isAdmin()
+      );
+      allow update: if isAuthenticated() && isValidUser(request.resource.data) && (
+        (isOwner(userId) && request.resource.data.role == resource.data.role && request.resource.data.uid == resource.data.uid) || isAdmin()
+      );
+      allow delete: if isAdmin();
+    }
+
+    match /leads/{leadId} {
+      allow read: if isAdmin();
+      // Anyone can submit a lead (contact form)
+      allow create: if isValidLead(request.resource.data) && request.resource.data.status == 'new';
+      allow update: if isAdmin() && isValidLead(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    match /chats/{chatId} {
+      // Allow read if admin or if the user owns the chat (via userId or sessionId)
+      allow read: if isAdmin() || (isAuthenticated() && resource.data.userId == request.auth.uid);
+      // Anyone can create a chat (anonymous or logged in)
+      allow create: if isValidChat(request.resource.data);
+      // Anyone can update their own chat (to add messages)
+      allow update: if isValidChat(request.resource.data) && (
+        isAdmin() || 
+        (isAuthenticated() && resource.data.userId == request.auth.uid) ||
+        (!isAuthenticated() && request.resource.data.sessionId == resource.data.sessionId)
+      );
+      allow delete: if isAdmin();
+    }
+
+    match /content_suggestions/{suggestionId} {
+      allow read, write: if isAdmin() && (request.method == 'read' || isValidContentSuggestion(request.resource.data));
+    }
+  }
+}

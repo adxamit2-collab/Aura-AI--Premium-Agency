@@ -1,0 +1,35 @@
+import { motion } from 'motion/react';
+
+export default function About() {
+  return (
+    <div className="bg-stone-50 py-24">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="max-w-3xl mx-auto text-center"
+        >
+          <h1 className="text-4xl md:text-5xl font-serif font-bold text-stone-900 mb-6">About Aura.</h1>
+          <p className="text-lg text-stone-600 mb-12">
+            We are a premium digital agency that believes in the power of artificial intelligence to transform brands. Our team of designers, engineers, and AI specialists work together to create digital experiences that are not only beautiful but intelligent.
+          </p>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 text-left">
+            <div className="bg-white p-8 rounded-3xl shadow-sm border border-stone-100">
+              <h3 className="text-xl font-serif font-bold mb-4">Our Mission</h3>
+              <p className="text-stone-600 text-sm leading-relaxed">
+                To bridge the gap between human creativity and artificial intelligence, delivering unparalleled digital solutions that drive growth and engagement.
+              </p>
+            </div>
+            <div className="bg-white p-8 rounded-3xl shadow-sm border border-stone-100">
+              <h3 className="text-xl font-serif font-bold mb-4">Our Vision</h3>
+              <p className="text-stone-600 text-sm leading-relaxed">
+                A future where every digital interaction is personalized, seamless, and deeply impactful, powered by ethical and advanced AI technologies.
+              </p>
+            </div>
+          </div>
+        </motion.div>
+      </div>
+    </div>
+  );
+}
